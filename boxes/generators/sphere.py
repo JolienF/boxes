@@ -23,7 +23,6 @@ import numpy
 from boxes import *
 from collections import namedtuple
 
-
 class Sphere(Boxes):
     """Actually not a sphere, but a hosohedron. Also not actually a box, but a globe, lamp, ornament or whatever you want it to be."""
 
@@ -43,13 +42,16 @@ class Sphere(Boxes):
         self.argparser.add_argument(
             "--bottom_hole_radius", action="store", type=float, default=120,
             help="The size of the polygonal hole at the bottom")
+        self.argparser.add_argument(
+            "--scoring_lines", action="store", type=boolarg, default=False,
+            help="Add scoring lines to easier fold tabs")
 
         defaultgroup = self.argparser._action_groups[1]
         for action in defaultgroup._actions:
             if action.dest == 'tabs':
                 action.type = int
                 action.default = 10
-                action.help = "number of tabs"
+                action.help = "The number of tabs. This has to be an even number"
             if action.dest == 'thickness':
                 action.default = 1.0
         defaultgroup.add_argument( # I placed it here, hoping it would be grouped together with tabs, but this doesn't work (tips welcome)
@@ -60,12 +62,12 @@ class Sphere(Boxes):
             help="The width of the tabs (in mm)")
 
     Curve = namedtuple('Curve', ["degrees", "radius"])
+    TurnToDirection = namedtuple('TurnToDirection', ["degrees"])
 
     def calculateXOfGore(self, u):
-
         return math.sin(u / self.sphere_radius) * self.halfBellyLens
 
-    def coordinatesPartOfGore(self, u_start, u_stop, isRight):
+    def coordinatesPartOfGore(self, u_start, u_stop, isRight, includeFinalTurn=False):
         N = self.resolution
         points = []
 
@@ -73,14 +75,22 @@ class Sphere(Boxes):
         if (not isRight):
             direction = -1
 
-        for i in range (N + 1):
-            u = (u_stop - u_start) / N * i + u_start
+        for i in numpy.linspace(u_start, u_stop, N + 1):
+            u = i
             x = direction * self.calculateXOfGore(u)
             points.append((x, u))
 
+        if includeFinalTurn:
+            if(isRight):
+                points.append(self.TurnToDirection(math.degrees(self.calculateTangentAngle(u_stop))))
+            else:
+                unmirroredTangentAngle = self.calculateTangentAngle(u_stop)
+                heading = 90 - unmirroredTangentAngle + 180
+                points.append(self.TurnToDirection(math.degrees(heading)))
+
         return(points)
 
-    def coordinatesPartOfOffset(self, u_start, u_stop, normalDistance, isRight):                           # see wiki of Parallel Curves x_d(t) = x(t) + d * n(t)
+    def coordinatesPartOfOffset(self, u_start, u_stop, normalDistance, isRight, includeFinalTurn=False):                           # see wiki of Parallel Curves x_d(t) = x(t) + d * n(t)
         N = self.resolution
         points = []
 
@@ -88,13 +98,25 @@ class Sphere(Boxes):
         if (not isRight):
             direction = -1
 
-        for i in range (N + 1):
-            u = (u_stop - u_start) / N * i + u_start
+        for i in numpy.linspace(u_start, u_stop, N + 1):
+            u = i
             u_offset = u + normalDistance * math.sin(self.calculateNormalAngle(u))
             x_offset = direction * (self.calculateXOfGore(u) + normalDistance * math.cos(self.calculateNormalAngle(u))) # could be replaced by self.calculateXofOffsetGore
             points.append((x_offset, u_offset))
+        if includeFinalTurn:
+            if(isRight):
+                points.append(self.TurnToDirection(math.degrees(self.calculateTangentAngle(u_stop))))
+            else:
+                unmirroredTangentAngle = self.calculateTangentAngle(u_stop)
+                heading = 90 - unmirroredTangentAngle + 180
+                points.append(self.TurnToDirection(math.degrees(heading)))
 
         return(points)
+
+    @holeCol
+    def scoringLines(self, u_start, u_stop, isRight):
+        points = self.coordinatesPartOfGore(u_start, u_stop, isRight)
+        self.drawPoints(points, kerfdir=0, close=False)
 
     def calculateNormalAngle(self, u):
         return self.calculateTangentAngle(u) - 90 * math.pi / 180
@@ -134,7 +156,6 @@ class Sphere(Boxes):
         return points
 
     def coordinatesToPolyline(self, points):
-        # needs all the coordinates at once, if this could handle separate pieces, I would need to remember the absolute angle
         polyPoints = [0]
         distance = 0
         previousWasCurve = False
@@ -147,7 +168,12 @@ class Sphere(Boxes):
                 previousAngle += points[i].degrees
                 previousWasCurve = True
                 i += 2
-
+            elif isinstance(points[i], self.TurnToDirection):
+                relativeAngle = points[i].degrees - previousAngle
+                relativeAngle = (relativeAngle + 180) % 360 - 180
+                polyPoints.extend([relativeAngle, 0])
+                previousAngle = points[i].degrees
+                i += 1
             else:
                 if (previousWasCurve):
                     previousWasCurve = False
@@ -172,6 +198,8 @@ class Sphere(Boxes):
         # Tabs
         # Surrounding spaces don't make much sense in this case, so I've left those out
         # I've changed tabs from mm to amount, because the first and last tab are very important to keep the shape nice
+    def coordinatesTabStart(self):
+        return [self.Curve(-180, self.thickness / 2), 0, self.Curve(180, (self.tab_width - self.thickness) / 2), 0]
 
     def coordinatesTabStart(self):
         return [self.Curve(-180, self.thickness / 2), 0, self.Curve(180, (self.tab_width - self.thickness) / 2), 0]
@@ -210,30 +238,30 @@ class Sphere(Boxes):
         self.bellyLens = 2 * math.tan((2 * math.pi) / (2 * self.amount_gores)) * self.sphere_radius
         self.halfBellyLens = self.bellyLens / 2
 
-        self.x_rightGoreTop = self.calculateXofTopAndGoreIntersection() #TODO remove right, it's confusing
+        self.x_rightGoreTop = self.calculateXofTopAndGoreIntersection()
         self.u_goreTop = self.calculateUpperUOfGore(self.x_rightGoreTop)
         self.u_goreBottom = self.calculateUOfBottomHole()
         self.x_rightGoreBottom = self.calculateXOfGore(self.u_goreBottom)
-
         self.u_tabPoints = self.divideGore(self.tabs, self.corner_tab)
 
-        allCoordinates.extend(self.coordinatesPartOfGore(self.u_goreBottom, self.u_tabPoints[0], True))
+        # Right half
+        allCoordinates.extend(self.coordinatesPartOfGore(self.u_goreBottom, self.u_tabPoints[0], True, True))
 
         for i in range(0, len(self.u_tabPoints) - 1, 2):
             allCoordinates.extend(self.coordinatesTabStart())
-            allCoordinates.extend(self.coordinatesPartOfOffset(self.u_tabPoints[i], self.u_tabPoints[i + 1], self.tab_width, True))
+            allCoordinates.extend(self.coordinatesPartOfOffset(self.u_tabPoints[i], self.u_tabPoints[i + 1], self.tab_width, True, True))
             allCoordinates.extend(self.coordinatesTabEnd())
-            allCoordinates.extend(self.coordinatesPartOfGore(self.u_tabPoints[i + 1], self.u_tabPoints[i + 2], True))
+            allCoordinates.extend(self.coordinatesPartOfGore(self.u_tabPoints[i + 1], self.u_tabPoints[i + 2], True, True))
 
         lastTabPoint = self.u_tabPoints[-1]
-        upperCornerU = self.u_goreTop - self.normalCompensation(self.u_tabPoints[-1])
+        upperCornerU = lastTabPoint + self.normalCompensation(lastTabPoint)
 
         allCoordinates.extend(self.coordinatesTabStart())
 
-        if (lastTabPoint < upperCornerU):
-            allCoordinates.extend(self.coordinatesPartOfOffset(lastTabPoint, upperCornerU, self.tab_width, True)) # line is not entirely straight, because te normalcompensation is simplified (should be at a bit lower u)
+        if (upperCornerU < self.u_goreTop):
+            allCoordinates.extend(self.coordinatesPartOfOffset(lastTabPoint, self.u_goreTop - self.normalCompensation(self.u_goreTop), self.tab_width, True)) # line is not entirely straight, because te normalcompensation is simplified (should be at a bit lower u)
         else:
-            allCoordinates.extend([(self.calculateXofOffsetGore(upperCornerU), upperCornerU + self.tab_width * math.sin(self.calculateNormalAngle(upperCornerU)))])
+            allCoordinates.extend([(self.calculateXofOffsetGore(lastTabPoint), upperCornerU)])
         allCoordinates.extend([(self.x_rightGoreTop, self.u_goreTop)])
 
         allCoordinates.extend(self.coordinatesTopHole(self.x_rightGoreTop, -self.x_rightGoreTop))
@@ -248,14 +276,14 @@ class Sphere(Boxes):
             allCoordinates.extend(self.coordinatesPartOfGore(self.u_tabPoints[i - 1], self.u_tabPoints[i - 2], False))
 
         firstTabPoint = self.u_tabPoints[0]
-        lowerCornerU = self.u_goreBottom + self.normalCompensation(self.u_tabPoints[-1])
+        lowerCornerU = firstTabPoint + self.normalCompensation(firstTabPoint)
 
         allCoordinates.extend(self.coordinatesTabStart())
 
-        if (firstTabPoint > lowerCornerU):
-            allCoordinates.extend(self.coordinatesPartOfOffset(firstTabPoint, lowerCornerU, self.tab_width, False))
+        if (lowerCornerU > self.u_goreBottom):
+            allCoordinates.extend(self.coordinatesPartOfOffset(firstTabPoint, self.u_goreBottom - self.normalCompensation(self.u_goreBottom), self.tab_width, False))
         else:
-            allCoordinates.extend([(-self.calculateXofOffsetGore(lowerCornerU), lowerCornerU + self.tab_width * math.sin(self.calculateNormalAngle(lowerCornerU)))])
+            allCoordinates.extend([(-self.calculateXofOffsetGore(firstTabPoint), lowerCornerU)])
         allCoordinates.extend([(-self.x_rightGoreBottom, self.u_goreBottom)])
 
         allCoordinates.extend([(self.x_rightGoreBottom, self.u_goreBottom)])
@@ -263,7 +291,25 @@ class Sphere(Boxes):
         polyPoints = self.coordinatesToPolyline(allCoordinates)
 
         self.moveTo(-self.halfBellyLens, 30)
+
         moveX = self.bellyLens + self.tab_width * 2 + 30
         for i in range(self.amount_gores):
-            self.moveTo(moveX, 0)
+
+            self.ctx.save()
+            self.moveTo(0, -self.burn)
             self.polyline(*polyPoints)
+            self.ctx.restore()
+
+            if self.scoring_lines:
+                self.ctx.save()
+                self.moveTo(-self.calculateXOfGore(self.u_goreBottom), - self.u_goreBottom)
+
+                for i in range(0, len(self.u_tabPoints) - 1, 2):
+                    self.scoringLines(self.u_tabPoints[i], self.u_tabPoints[i + 1], True)
+                self.scoringLines(lastTabPoint, self.u_goreTop, True)
+                for i in range(len(self.u_tabPoints) - 1, 0, -2):
+                    self.scoringLines(self.u_tabPoints[i], self.u_tabPoints[i - 1], False)
+                self.scoringLines(firstTabPoint, self.u_goreBottom, False)
+                self.ctx.restore()
+
+            self.moveTo(moveX, 0)
