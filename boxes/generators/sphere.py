@@ -25,11 +25,8 @@ from collections import namedtuple
 
 
 class Sphere(Boxes):
-    """Actually not a sphere, but a hosohedron. Also not actually a box, but a globe, lamp or ornament"""
+    """Actually not a sphere, but a hosohedron. Also not actually a box, but a globe, lamp, ornament or whatever you want it to be."""
 
-
-# TODO thickness/ 2 must be larger than kerf or other way around
-# Tabs to be even number! (and at least 2)
     ui_group = "Misc"
 
     def __init__(self) -> None:
@@ -38,15 +35,14 @@ class Sphere(Boxes):
             "--sphere_radius",  action="store", type=float, default=200,
             help="The radius of the assembled sphere")
         self.argparser.add_argument(
-            "--amount_gores",  action="store", type=int, default=6, #TODO minium = 3
+            "--amount_gores",  action="store", type=int, default=6,
             help="The amount of gores/parts you want the sphere to have, has to be at least 3")
         self.argparser.add_argument(
             "--top_hole_radius",  action="store", type=float, default=30,
-            help="The size of the circular hole at the top") #TODO can't be negative, test for 0
+            help="The size of the circular hole at the top")
         self.argparser.add_argument(
             "--bottom_hole_radius", action="store", type=float, default=120,
-            help="The size of the polygonal hole at the bottom")  #TODO can't be negative, test for 0
-
+            help="The size of the polygonal hole at the bottom")
 
         defaultgroup = self.argparser._action_groups[1]
         for action in defaultgroup._actions:
@@ -60,19 +56,10 @@ class Sphere(Boxes):
             "--corner_tab", action="store", type=float, default=4.0,
             help="The length of the tabs on the corners (in mm)(not supported everywhere). Keep as small as your material strength allows for cleaner result")
         self.argparser.add_argument(
-            "--tab_width", action="store", type=float, default=8.0, # has to be larger than material thickness
+            "--tab_width", action="store", type=float, default=8.0,
             help="The width of the tabs (in mm)")
-        # self.argparser.add_argument(
-        #     "--thickness", action="store", type=float, default=1.0,
-        #     help="The thickness of the material (in mm)")
-
-        # parse = argparse.ArgumentParser(conflict_handler="resolve")
-        # parse.add_argument(
-        #     "--tabs", action="store", type=float, default=0.0,
-        #     help="new tabs")
 
     Curve = namedtuple('Curve', ["degrees", "radius"])
-
 
     def calculateXOfGore(self, u):
 
@@ -91,8 +78,6 @@ class Sphere(Boxes):
             x = direction * self.calculateXOfGore(u)
             points.append((x, u))
 
-        # self.drawPoints(points, 1, close=False) #kerfdir = 1
-
         return(points)
 
     def coordinatesPartOfOffset(self, u_start, u_stop, normalDistance, isRight):                           # see wiki of Parallel Curves x_d(t) = x(t) + d * n(t)
@@ -109,10 +94,7 @@ class Sphere(Boxes):
             x_offset = direction * (self.calculateXOfGore(u) + normalDistance * math.cos(self.calculateNormalAngle(u))) # could be replaced by self.calculateXofOffsetGore
             points.append((x_offset, u_offset))
 
-        # self.drawPoints(points, 1, close=False)
         return(points)
-
-
 
     def calculateNormalAngle(self, u):
         return self.calculateTangentAngle(u) - 90 * math.pi / 180
@@ -138,16 +120,6 @@ class Sphere(Boxes):
     def calculateUOfBottomHole(self):
         y = math.asin(self.bottom_hole_radius / self.sphere_radius)
         return self.mapYToU(y)
-
-    def plotBottomHoleByRadius(self):
-        self.ctx.move_to(-self.x_rightGoreBottom, self.u_rightGoreBottom)
-        self.ctx.line_to(self.x_rightGoreBottom, self.u_rightGoreBottom)
-
-        # def plotBottomHoleByRadius(self):
-        # self.medium.penup()
-        # self.medium.setposition(-self.x_rightGoreBottom, self.u_rightGoreBottom)
-        # self.medium.pendown()
-        # self.medium.goto(self.x_rightGoreBottom, self.u_rightGoreBottom)
 
     def coordinatesTopHole(self, x_start, x_stop):
         N = self.resolution
@@ -188,7 +160,7 @@ class Sphere(Boxes):
 
                 distance = math.dist(points[i], points[i - 1])
 
-                if (distance > 0.001):
+                if (distance > 0.0001):
                     polyPoints.append(relativeAngle)
                     polyPoints.append(distance)
                     previousWasCurve = False
@@ -197,72 +169,40 @@ class Sphere(Boxes):
 
         return(polyPoints)
 
-
-
         # Tabs
         # Surrounding spaces don't make much sense in this case, so I've left those out
         # I've changed tabs from mm to amount, because the first and last tab are very important to keep the shape nice
 
-    def coordinatesTabStart(self, isRight):
-        direction = 1
-        if (not isRight):
-            direction = -1
+    def coordinatesTabStart(self):
+        return [self.Curve(-180, self.thickness / 2), 0, self.Curve(180, (self.tab_width - self.thickness) / 2), 0]
 
-        return [self.Curve(-180 * direction, self.thickness / 2), 0, self.Curve(180 * direction, (self.tab_width - self.thickness) / 2), 0]
-
-    def coordinatesTabEnd(self, isRight):
-        direction = 1
-        if (not isRight):
-            direction = -1
-
-        return [self.Curve(180 * direction, (self.tab_width - self.thickness) / 2), 0, self.Curve(-180 * direction, self.thickness / 2), 0]
-
-    # @holeCol
-    # def plotTabStart(self, u, isRight):
-    #     direction = 1
-    #     if (not isRight):
-    #         direction = -1
-
-    #     # self.ctx.line_to(self.calculateXOfGore(u), u)
-    #     # self.moveTo(startPoints[0], startPoints[1])
-    #     self.moveTo(self.calculateXOfGore(u) * direction, u) #TODO firstfinger
-    #     # self.ctx.move_to(self.calculateXOfGore(u), u)
-    #     self.ctx.rotate(direction * (self.calculateTangentAngle(u)))
-
-    #     # self.left(direction * (self.calculateTangentAngle(u) * 360 / (2* math.pi) - 180))
-    #     self.corner(-180, self.thickness / 2)
-
-    #     self.corner(180, (self.tab_width - self.thickness) / 2)
-
-
-        # self.medium.setheading(0)
-        # self.medium.left(direction * (self.calculateTangentAngle(u) * 360 / (2* math.pi) - 180))
-        # self.medium.circle(self.materialRadius, -180)
-        # self.medium.right(180)
-        # self.medium.circle(self.fingerRadius, 180)
-
-    # @holeCol
-    # def plotTabEnd(self, u, isRight, startPoints):
-    #     direction = 1
-    #     if (not isRight):
-    #         direction = -1
-
-    #     self.moveTo(startPoints[0], startPoints[1]) #TODO firstfinger
-    #     self.ctx.rotate(direction * (self.calculateTangentAngle(u)))
-
-
-    #     self.corner(180, (self.tab_width - self.thickness) / 2)
-    #     self.corner(-180, self.thickness / 2)
-
+    def coordinatesTabEnd(self):
+        return [self.Curve(180, (self.tab_width - self.thickness) / 2), 0, self.Curve(-180, self.thickness / 2), 0]
 
         # This function divides the tabs over the length of u, not the length of the gore itself. Shortcuts were taken
     def divideGore(self, numberOfTabs, tinyTabLength):
-        return numpy.linspace(self.u_rightGoreBottom + tinyTabLength,
-                              self.u_rightGoreTop - tinyTabLength,
+        return numpy.linspace(self.u_goreBottom + tinyTabLength,
+                              self.u_goreTop - tinyTabLength,
                               num=numberOfTabs + 1)
 
     def render(self):
-        tabs = self.tabs
+        if self.tabs % 2 == 1:
+            raise ValueError("The number of tabs has to be even")
+        if self.tab_width <= self.thickness:
+            raise ValueError("The tab width has to be larger than the thickness of the material")
+        if self.amount_gores < 3:
+            raise ValueError("The amount of gores has to be at least 3")
+        if self.top_hole_radius < 0:
+            raise ValueError("The top hole radius cannot be negative")
+        if self.bottom_hole_radius < 0:
+            raise ValueError("The bottom hole radius cannot be negative")
+        if self.corner_tab < 0:
+            raise ValueError("The corner tab cannot be negative")
+        if self.sphere_radius < 0:
+            raise ValueError("The sphere radius cannot be negative")
+        if self.thickness / 2 < self.burn:
+            raise ValueError("The material thickness has to be at least twice the burn thickness")
+
         allCoordinates = []
 
         self.resolution = int(self.sphere_radius / 10)  # This is arbitrary. I just want the resolution to be proportional to the total size
@@ -271,148 +211,59 @@ class Sphere(Boxes):
         self.halfBellyLens = self.bellyLens / 2
 
         self.x_rightGoreTop = self.calculateXofTopAndGoreIntersection() #TODO remove right, it's confusing
-        self.u_rightGoreTop = self.calculateUpperUOfGore(self.x_rightGoreTop)
-        self.u_rightGoreBottom = self.calculateUOfBottomHole()
-        self.x_rightGoreBottom = self.calculateXOfGore(self.u_rightGoreBottom)
+        self.u_goreTop = self.calculateUpperUOfGore(self.x_rightGoreTop)
+        self.u_goreBottom = self.calculateUOfBottomHole()
+        self.x_rightGoreBottom = self.calculateXOfGore(self.u_goreBottom)
 
         self.u_tabPoints = self.divideGore(self.tabs, self.corner_tab)
 
-        #tabcheck
-        # for i in range(len(self.u_tabPoints)):
-        #     self.ctx.move_to(0, self.u_tabPoints[i])
-        #     self.ctx.line_to(150, self.u_tabPoints[i])
-        # self.drawPoints(self.coordinatesPartOfGore(self.u_rightGoreBottom, self.u_rightGoreTop, True))
-
-        allCoordinates.extend(self.coordinatesPartOfGore(self.u_rightGoreBottom, self.u_tabPoints[0], True))
+        allCoordinates.extend(self.coordinatesPartOfGore(self.u_goreBottom, self.u_tabPoints[0], True))
 
         for i in range(0, len(self.u_tabPoints) - 1, 2):
-            allCoordinates.extend(self.coordinatesTabStart(True))
+            allCoordinates.extend(self.coordinatesTabStart())
             allCoordinates.extend(self.coordinatesPartOfOffset(self.u_tabPoints[i], self.u_tabPoints[i + 1], self.tab_width, True))
-            allCoordinates.extend(self.coordinatesTabEnd(True))
+            allCoordinates.extend(self.coordinatesTabEnd())
             allCoordinates.extend(self.coordinatesPartOfGore(self.u_tabPoints[i + 1], self.u_tabPoints[i + 2], True))
 
         lastTabPoint = self.u_tabPoints[-1]
-        upperCornerU = self.u_rightGoreTop - self.normalCompensation(self.u_tabPoints[-1])
+        upperCornerU = self.u_goreTop - self.normalCompensation(self.u_tabPoints[-1])
 
-        allCoordinates.extend(self.coordinatesTabStart(True))
+        allCoordinates.extend(self.coordinatesTabStart())
 
         if (lastTabPoint < upperCornerU):
             allCoordinates.extend(self.coordinatesPartOfOffset(lastTabPoint, upperCornerU, self.tab_width, True)) # line is not entirely straight, because te normalcompensation is simplified (should be at a bit lower u)
         else:
             allCoordinates.extend([(self.calculateXofOffsetGore(upperCornerU), upperCornerU + self.tab_width * math.sin(self.calculateNormalAngle(upperCornerU)))])
-        allCoordinates.extend([(self.x_rightGoreTop, self.u_rightGoreTop)])
+        allCoordinates.extend([(self.x_rightGoreTop, self.u_goreTop)])
 
         allCoordinates.extend(self.coordinatesTopHole(self.x_rightGoreTop, -self.x_rightGoreTop))
 
         #Left half
-        allCoordinates.extend(self.coordinatesPartOfGore(self.u_rightGoreTop, lastTabPoint, False))
+        allCoordinates.extend(self.coordinatesPartOfGore(self.u_goreTop, lastTabPoint, False))
 
         for i in range(len(self.u_tabPoints) - 1, 0, -2):
-            allCoordinates.extend(self.coordinatesTabStart(True))
+            allCoordinates.extend(self.coordinatesTabStart())
             allCoordinates.extend(self.coordinatesPartOfOffset(self.u_tabPoints[i], self.u_tabPoints[i - 1], self.tab_width, False))
-            allCoordinates.extend(self.coordinatesTabEnd(True))
+            allCoordinates.extend(self.coordinatesTabEnd())
             allCoordinates.extend(self.coordinatesPartOfGore(self.u_tabPoints[i - 1], self.u_tabPoints[i - 2], False))
 
-
         firstTabPoint = self.u_tabPoints[0]
-        lowerCornerU = self.u_rightGoreBottom + self.normalCompensation(self.u_tabPoints[-1])
-        # bottomTabPoints = []
+        lowerCornerU = self.u_goreBottom + self.normalCompensation(self.u_tabPoints[-1])
 
-        allCoordinates.extend(self.coordinatesTabStart(True))
+        allCoordinates.extend(self.coordinatesTabStart())
 
         if (firstTabPoint > lowerCornerU):
             allCoordinates.extend(self.coordinatesPartOfOffset(firstTabPoint, lowerCornerU, self.tab_width, False))
         else:
             allCoordinates.extend([(-self.calculateXofOffsetGore(lowerCornerU), lowerCornerU + self.tab_width * math.sin(self.calculateNormalAngle(lowerCornerU)))])
-        allCoordinates.extend([(-self.x_rightGoreBottom, self.u_rightGoreBottom)])
+        allCoordinates.extend([(-self.x_rightGoreBottom, self.u_goreBottom)])
 
-        allCoordinates.extend([(self.x_rightGoreBottom, self.u_rightGoreBottom)])
+        allCoordinates.extend([(self.x_rightGoreBottom, self.u_goreBottom)])
 
         polyPoints = self.coordinatesToPolyline(allCoordinates)
-
-
 
         self.moveTo(-self.halfBellyLens, 30)
         moveX = self.bellyLens + self.tab_width * 2 + 30
         for i in range(self.amount_gores):
             self.moveTo(moveX, 0)
             self.polyline(*polyPoints)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        # thisPoint = self.coordinatesPartOfGore(self.u_rightGoreBottom, self.u_tabPoints[0], True)
-        # # self.ctx.line_to(self.calculateXOfGore(self.u_tabPoints[1]), self.u_tabPoints[1])
-
-        # for i in range(0, len(self.u_tabPoints) - 1, 2):
-        #     # self.plotTabStart(self.u_tabPoints[i], True, color=Color.ANNOTATIONS)
-        #     self.plotTabStart(self.u_tabPoints[i], True)
-        #     punt = self.coordinatesPartOfOffset(self.u_tabPoints[i], self.u_tabPoints[i + 1], self.tab_width, True)
-        #     self.plotTabEnd(self.u_tabPoints[i + 1], True, punt)
-        #     thisPoint = self.coordinatesPartOfGore(self.u_tabPoints[i + 1], self.u_tabPoints[i + 2], True)
-
-        # lastTabPoint = self.u_tabPoints[-1]
-        # upperCornerU = self.u_rightGoreTop - self.normalCompensation(self.u_tabPoints[-1])
-
-        # self.plotTabStart(lastTabPoint, True)
-
-        # if (lastTabPoint < upperCornerU):
-        #     self.coordinatesPartOfOffset(lastTabPoint, upperCornerU , self.tab_width, True)
-        #     self.ctx.move_to(self.calculateXofOffsetGore(upperCornerU), self.u_rightGoreTop)
-        # else:
-        #     self.ctx.move_to(self.calculateXofOffsetGore(lastTabPoint), lastTabPoint + self.normalCompensation(lastTabPoint))
-        # self.ctx.line_to(self.x_rightGoreTop, self.u_rightGoreTop)
-
-        # self.coordinatesTopHole(self.x_rightGoreTop, -self.x_rightGoreTop)
-
-        # self.coordinatesPartOfGore(self.u_rightGoreTop, self.u_tabPoints[-1], False)
-
-        # for i in range(len(self.u_tabPoints) - 1, 0, -2):
-        #     self.plotTabStart(self.u_tabPoints[i], False)
-        #     punt = self.coordinatesPartOfOffset(self.u_tabPoints[i], self.u_tabPoints[i - 1], self.tab_width, False)
-        #     self.plotTabEnd(self.u_tabPoints[i - 1], False, punt)
-        #     thisPoint = self.coordinatesPartOfGore(self.u_tabPoints[i - 1], self.u_tabPoints[i - 2], False)
-
-        # firstTabPoint = self.u_tabPoints[0]
-        # lowerCornerU = self.u_rightGoreBottom + self.normalCompensation(self.u_tabPoints[-1])
-        # bottomTabPoints = []
-        # self.plotTabStart(firstTabPoint, False)
-
-        # if (firstTabPoint > lowerCornerU):
-        #     self.coordinatesPartOfOffset(self.u_tabPoints[0], lowerCornerU , self.tab_width, False)
-        #     self.ctx.move_to(-self.calculateXofOffsetGore(lowerCornerU), self.u_rightGoreBottom)  # proper fix would be to make it one object, so I dont need to move to a point, would save some functions and calculations
-        #     # bottomTabPoints.append((-self.calculateXofOffsetGore(lowerCornerU), self.u_rightGoreBottom))
-        # else:
-        #     self.ctx.move_to(-self.calculateXofOffsetGore(firstTabPoint), firstTabPoint + self.normalCompensation(firstTabPoint))
-        #     # bottomTabPoints.append((-self.calculateXofOffsetGore(firstTabPoint), float(firstTabPoint + self.normalCompensation(firstTabPoint))))
-        # self.ctx.line_to(-self.x_rightGoreBottom, self.u_rightGoreBottom)
-
-
-
-
-        # bottomTabPoints.append((-self.x_rightGoreBottom, self.u_rightGoreBottom))
-        # print(firstTabPoint)
-        # print(self.normalCompensation(firstTabPoint))
-        # print(bottomTabPoints)
-        # print(firstTabPoint + self.normalCompensation(firstTabPoint))
-        # self.drawPoints(bottomTabPoints, 1, False)
-        # self.plotBottomHoleByRadius()
-
-        # print(self.u_tabPoints)
-        # self.edge(tabs)hnqvb

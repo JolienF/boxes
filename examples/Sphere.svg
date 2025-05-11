@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <svg height="535.90mm" viewBox="0.0 0.0 1651.81 535.90" width="1651.81mm" xmlns="http://www.w3.org/2000/svg" xmlns:cc="http://creativecommons.org/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
 <!--
-Sphere - Actually not a sphere, but a hosohedron. Also not actually a box, but a globe, lamp or ornament
+Sphere - Actually not a sphere, but a hosohedron. Also not actually a box, but a globe, lamp, ornament or whatever you want it to be.
 
 Created with Boxes.py (https://boxes.hackerspace-bamberg.de/)
 Command line (remove spaces between dashes): boxes Sphere
@@ -11,7 +11,7 @@ Command line (remove spaces between dashes): boxes Sphere
 <rdf:RDF><cc:Work>
 <dc:title>Misc - Sphere</dc:title>
 <dc:source>boxes Sphere</dc:source>
-<dc:description>Actually not a sphere, but a hosohedron. Also not actually a box, but a globe, lamp or ornament
+<dc:description>Actually not a sphere, but a hosohedron. Also not actually a box, but a globe, lamp, ornament or whatever you want it to be.
 
 Created with Boxes.py (https://boxes.hackerspace-bamberg.de/)
 Command line: boxes Sphere
