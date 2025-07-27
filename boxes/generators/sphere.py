@@ -1,4 +1,4 @@
-# Copyright (C) 2013-2016 Jolien Franke
+# Copyright (C) 2025 Jolien and Josse Franke-Muller,
 #
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -31,7 +31,7 @@ class Sphere(Boxes):
     def __init__(self) -> None:
         super().__init__()
         self.argparser.add_argument(
-            "--sphere_radius",  action="store", type=float, default=200,
+            "--sphere_radius",  action="store", type=float, default=100,
             help="The radius of the assembled sphere")
         self.argparser.add_argument(
             "--amount_gores",  action="store", type=int, default=6,
@@ -40,7 +40,7 @@ class Sphere(Boxes):
             "--top_hole_radius",  action="store", type=float, default=30,
             help="The size of the circular hole at the top")
         self.argparser.add_argument(
-            "--bottom_hole_radius", action="store", type=float, default=120,
+            "--bottom_hole_radius", action="store", type=float, default=80,
             help="The size of the polygonal hole at the bottom")
         self.argparser.add_argument(
             "--scoring_lines", action="store", type=boolarg, default=False,
@@ -56,15 +56,15 @@ class Sphere(Boxes):
         for action in defaultgroup._actions:
             if action.dest == 'tabs':
                 action.type = int
-                action.default = 10
+                action.default = 6
                 action.help = "The number of tabs. This has to be an even number"
             if action.dest == 'thickness':
                 action.default = 1.0
         defaultgroup.add_argument( # I placed it here, hoping it would be grouped together with tabs, but this doesn't work (tips welcome)
-            "--corner_tab", action="store", type=float, default=4.0,
+            "--corner_tab", action="store", type=float, default=10.0,
             help="The length of the tabs on the corners (in mm)(not supported everywhere). Keep as small as your material strength allows for cleaner result")
         self.argparser.add_argument(
-            "--tab_width", action="store", type=float, default=8.0,
+            "--tab_width", action="store", type=float, default=5.0,
             help="The width of the tabs (in mm)")
 
     Curve = namedtuple('Curve', ["degrees", "radius"])
@@ -130,9 +130,6 @@ class Sphere(Boxes):
     def calculateTangentAngle(self, u):                                                                              #derivatives of u (goreHeigth) and x (cos(pi * i) * a * pi)
         return math.atan2(self.gore_heigth, math.cos(math.pi * (u / self.gore_heigth)) * math.pi * self.halfBellyLens) #atan2 to prevent division by 0 and quadrant (opposite sides not possible now)
 
-    def mapYToU(self, y):
-        return (y / math.pi) * self.gore_heigth
-
     def normalCompensation(self, u):                                            #So the offset can be drawn up to the same horizonal line as the equivalent u of the gore
         return math.sin(self.calculateNormalAngle(u)) * self.tab_width
 
@@ -146,8 +143,23 @@ class Sphere(Boxes):
         return (math.pi - math.asin(x / self.halfBellyLens)) * self.sphere_radius
 
     def calculateUOfBottomHole(self):
-        y = math.asin(self.bottom_hole_radius / self.sphere_radius)
-        return self.mapYToU(y)
+        theta = math.asin(self.bottom_hole_radius / self.sphere_radius)
+        return (theta / math.pi) * self.gore_heigth
+
+    def calculateLengthGoreTab(self):
+        N = self.resolution
+        length = 0
+
+        x1 = self.calculateXOfGore(self.u_tabPoints[0])
+        for i in numpy.linspace(self.u_tabPoints[0], self.u_tabPoints[1], N + 1):
+            u = i
+            x2 = self.calculateXOfGore(u)
+            dx = x2 - x1
+            du = (self.u_tabPoints[0] - self.u_tabPoints[1]) / N
+            length += math.sqrt((du**2) + dx**2)
+            x1 = x2
+
+        return(length)
 
     def coordinatesTopHole(self, x_start, x_stop):
         N = self.resolution
@@ -155,8 +167,7 @@ class Sphere(Boxes):
 
         for i in range (N + 1):
             x = (x_stop - x_start) / N * i + x_start
-            y = math.acos(-(math.sqrt(self.sphere_radius**2 - self.top_hole_radius**2 + x**2)) / self.sphere_radius)
-            u = self.mapYToU(y)
+            u = (math.pi - math.asin(math.sqrt(self.top_hole_radius**2 - x**2) / self.sphere_radius)) * self.sphere_radius
             points.append((x, u))
 
         return points
@@ -291,17 +302,6 @@ class Sphere(Boxes):
 
 
     def render(self):
-        self.resolution = int(self.sphere_radius / 10)  # This is arbitrary. I just want the resolution to be proportional to the total size
-        self.gore_heigth = math.pi * self.sphere_radius  # the midline of the gore is the same as the line on the sphere, so half a circumference
-        self.bellyLens = 2 * math.tan((2 * math.pi) / (2 * self.amount_gores)) * self.sphere_radius
-        self.halfBellyLens = self.bellyLens / 2
-
-        self.x_rightGoreTop = self.calculateXofTopAndGoreIntersection()
-        self.u_goreTop = self.calculateUpperUOfGore(self.x_rightGoreTop)
-        self.u_goreBottom = self.calculateUOfBottomHole()
-        self.x_rightGoreBottom = self.calculateXOfGore(self.u_goreBottom)
-        self.u_tabPoints = self.divideGore(self.tabs, self.corner_tab)
-
         if self.tabs % 2 == 1:
             raise ValueError("The number of tabs has to be even")
         if self.tab_width <= self.thickness:
@@ -310,18 +310,39 @@ class Sphere(Boxes):
             raise ValueError("The amount of gores has to be at least 3")
         if self.top_hole_radius < 0:
             raise ValueError("The top hole radius cannot be negative")
+        if self.top_hole_radius > self.sphere_radius:
+            raise ValueError("The top hole radius cannot be larger than the sphere radius")
         if self.bottom_hole_radius < 0:
             raise ValueError("The bottom hole radius cannot be negative")
+        if self.bottom_hole_radius > self.sphere_radius:
+            raise ValueError("The bottom hole radius cannot be larger than the sphere radius")
         if self.corner_tab < 0:
             raise ValueError("The corner tab cannot be negative")
         if self.sphere_radius < 0:
             raise ValueError("The sphere radius cannot be negative")
         if self.thickness / 2 < self.burn:
             raise ValueError("The material thickness has to be at least twice the burn thickness")
-        if self.cable_hook_radius + 1 > 0.8 * self.x_rightGoreTop:
-            raise ValueError("The cable hook radius is too big for this size top hole")
         if self.cable_hook > self.amount_gores:
             raise ValueError("The amount of hooks cannot be larger than the amount of gores")
+
+
+        self.resolution = int(self.sphere_radius / 10)  # This is arbitrary. I just want the resolution to be proportional to the total size
+        self.gore_heigth = math.pi * self.sphere_radius  # the midline of the gore is the same as the line on the sphere, so half a circumference
+        self.bellyLens = 2 * math.tan((2 * math.pi) / (2 * self.amount_gores)) * self.sphere_radius
+        self.halfBellyLens = self.bellyLens / 2
+        self.x_rightGoreTop = self.calculateXofTopAndGoreIntersection()
+
+        if self.cable_hook_radius + 1 > 0.8 * self.x_rightGoreTop:
+            raise ValueError("The cable hook radius is too big for this size top hole")
+
+        self.u_goreTop = self.calculateUpperUOfGore(self.x_rightGoreTop)
+        self.u_goreBottom = self.calculateUOfBottomHole()
+        self.x_rightGoreBottom = self.calculateXOfGore(self.u_goreBottom)
+
+        self.u_tabPoints = self.divideGore(self.tabs, self.corner_tab)
+
+        if self.calculateLengthGoreTab() < (self.tab_width - self.thickness):
+            raise ValueError("Too many tabs")
 
         self.moveTo(-self.halfBellyLens, 30)
 
